@@ -156,6 +156,7 @@ export interface Lobby {
  * };
  */
 export interface User {
+    id: string;
     username: string;
     avatar: string;
     discriminator: string;
@@ -265,6 +266,27 @@ class CroissantAPI {
                 },
                 body: JSON.stringify({ targetUserId, amount })
             });
+            return await res.json();
+        },
+
+        /**
+         * Create a new user.
+         * @param options - Partial user object.
+         * @returns The created user.
+         * @example
+         * const newUser = await api.users.create({ username: "CroissantFan" });
+         */
+        create: async (options: Partial<User>): Promise<User> => {
+            if (!this.token) throw new Error('Token is required');
+            const res = await fetch(`${croissantBaseUrl}/users/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`
+                },
+                body: JSON.stringify(options)
+            });
+            if (!res.ok) throw new Error('Failed to create user');
             return await res.json();
         }
     };
