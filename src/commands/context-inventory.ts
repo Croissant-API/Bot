@@ -24,6 +24,13 @@ const command = {
 
     try {
       const user: User = interaction.targetUser;
+      const croissantUser = await croissantAPI.users.getUser(user.id);
+      if (!croissantUser) {
+        await croissantAPI.users.create({
+          id: user.id,
+          username: user.username
+        });
+      }
 
       await interaction.deferReply({ ephemeral: false });
       // Use the croissantAPI instance passed to the command, not the class directly

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SlashCommandBuilder, ChatInputCommandInteraction, User, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from "discord.js";
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from "discord.js";
 import { CroissantAPI, InventoryItem } from "../libs/croissant-api";
 
 const ITEMS_PER_PAGE = 15;
@@ -16,8 +16,14 @@ const command = {
 
   async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
     try {
-      const user: User = interaction.options.getUser("user") ?? interaction.user;
-
+      const user = interaction.options.getUser("user") ?? interaction.user;
+      const croissantUser = await croissantAPI.users.getUser(interaction.user.id);
+      if (!croissantUser) {
+        await croissantAPI.users.create({
+          id: interaction.user.id,
+          username: interaction.user.username
+        });
+      }
       await interaction.deferReply({ ephemeral: false });
       // Use the croissantAPI instance passed to the command, not the class directly
       const inventoryData = await croissantAPI.inventory.get(interaction.user.id) as InventoryItem[];
