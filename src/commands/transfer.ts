@@ -1,9 +1,8 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder, User, AutocompleteInteraction } from 'discord.js';
-import fetch from 'node-fetch';
 import { genKey } from '../utils';
 import { config } from 'dotenv';
 import path from 'path';
-import CroissantAPI, { IItem } from '../libs/croissant-api';
+import CroissantAPI, { InventoryItem, Item } from '../libs/croissant-api';
 config({ path: path.join(__dirname, '../../.env') });
 
 module.exports = {
@@ -27,23 +26,22 @@ module.exports = {
                 .setDescription('The quantity to transfer')
                 .setRequired(true)
         ),
-    async autocomplete(interaction: AutocompleteInteraction) {
+    async autocomplete(interaction: AutocompleteInteraction, croissantAPI: CroissantAPI) {
         const focusedValue = interaction.options.getFocused();
         const token = await genKey(interaction.user.id);
         if (!token) return interaction.respond([]);
         try {
-            // Use /inventory/@me to list the user's items
-            const res = await fetch(`${process.env.API_URL || "http://localhost:3000"}/api/inventory/@me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const inventory = await res.json();
+            const inventory = await croissantAPI.inventory.get(interaction.user.id) as InventoryItem[];
+            const items = await Promise.all(
+                inventory.map((item: InventoryItem) => croissantAPI.items.get(item.itemId))
+            );
             // Filter according to user search
-            const filtered = inventory.filter((item: IItem) =>
+            const filtered = items.filter((item: Item) =>
                 item.name.toLowerCase().includes(focusedValue.toLowerCase()) ||
                 item.itemId.toLowerCase().includes(focusedValue.toLowerCase())
             );
             return interaction.respond(
-                filtered.slice(0, 25).map((item: IItem) => ({
+                filtered.slice(0, 25).map((item: Item) => ({
                     name: item.name,
                     value: item.itemId
                 }))
@@ -52,12 +50,12 @@ module.exports = {
             return interaction.respond([]);
         }
     },
-    async execute(interaction: ChatInputCommandInteraction) {
+    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
         const me = interaction.user;
         const user = interaction.options.getUser('user') as User;
         const itemField = interaction.options.getString('item');
-        const items = await CroissantAPI.items.get() as IItem[];
-        const item: IItem | undefined = items.find((item: IItem) => item.itemId === itemField || item.name === itemField);
+        const items = await croissantAPI.items.list() as Item[];
+        const item: Item | undefined = items.find((item: Item) => item.itemId === itemField || item.name === itemField);
         const amount = interaction.options.getInteger('amount');
 
         if (!user || !item || !amount) {
@@ -74,20 +72,12 @@ module.exports = {
         }
 
         const itemId: string = item?.itemId;
-        const token = await genKey(me.id);
-        if (!token) {
-            await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
-            return;
-        }
 
-        // Check the user's inventory
         try {
-            const invRes = await fetch(`${process.env.API_URL || "http://localhost:3000"}/api/inventory/@me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const inventory = await invRes.json();
-            const item = inventory.find((i: IItem) => i.itemId === itemId);
-            if (!item || item.amount < amount) {
+            const inventory = await croissantAPI.inventory.get(interaction.user.id) as InventoryItem[];
+            // Find the inventory entry for the item
+            const inventoryEntry = inventory.find((inv) => inv.itemId === itemId);
+            if (!inventoryEntry || inventoryEntry.amount < amount) {
                 await interaction.reply({
                     content: "You do not have enough of this item in your inventory.",
                     ephemeral: true
@@ -98,23 +88,12 @@ module.exports = {
             // Get item info for display
             const itemDisplayName = item.name;
 
-            // Perform the transfer
-            const res = await fetch(`${process.env.API_URL || "http://localhost:3000"}/api/items/transfer/${encodeURIComponent(itemId)}`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    amount,
-                    targetUserId: user.id
-                }),
-            });
-            const data = await res.json();
+            // Use CroissantAPI to perform the transfer
+            const res = await croissantAPI.items.transfer(itemId, amount, user.id);
 
-            if (!res.ok) {
+            if (!res || res.message?.toLowerCase().includes("error")) {
                 await interaction.reply({
-                    content: data.message || "Error during item transfer.",
+                    content: res?.message || "Error during item transfer.",
                     ephemeral: true
                 });
                 return;

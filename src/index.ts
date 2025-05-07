@@ -3,6 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import dotenv from "dotenv";
 import { Command, Config } from "./types";
+import { genKey } from "./utils";
+import CroissantAPI from "./libs/croissant-api";
 
 declare module "discord.js" {
   export interface Client {
@@ -96,7 +98,13 @@ client.on("interactionCreate", async (interaction: Interaction) => {
         return;
       }
       try {
-        await command.execute(interaction);
+        const token = await genKey(interaction.user.id);
+        if (!token) {
+            await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
+            return;
+        }
+        const croissantApi = new CroissantAPI({token});
+        await command.execute(interaction, croissantApi);
       } catch (error) {
         console.error(`Error executing ${interaction.commandName}:`, error);
         await interaction.reply({
@@ -119,7 +127,13 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
 
     try {
-      await command.execute(interaction);
+      const token = await genKey(interaction.user.id);
+      if (!token) {
+          await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
+          return;
+      }
+      const croissantApi = new CroissantAPI({token});
+      await command.execute(interaction, croissantApi);
     } catch (error) {
       console.error(`Error executing ${interaction.commandName}:`, error);
       await interaction.reply({
@@ -138,7 +152,9 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
 
     try {
-      await command.autocomplete(interaction);
+      const token = await genKey(interaction.user.id);
+      const croissantApi = new CroissantAPI({token});
+      await command.autocomplete(interaction, croissantApi);
     } catch (error) {
       console.error(
         `Error executing autocomplete for ${interaction.commandName}:`,

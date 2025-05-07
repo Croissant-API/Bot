@@ -1,8 +1,8 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder, User } from 'discord.js';
-import fetch from 'node-fetch';
 import { genKey, emojis } from '../utils';
 import { config } from 'dotenv';
 import path from 'path';
+import CroissantAPI from '../libs/croissant-api';
 config({ path: path.join(__dirname, '../../.env') });
 
 module.exports = {
@@ -20,7 +20,7 @@ module.exports = {
                 .setDescription('The amount of credits to transfer')
                 .setRequired(true)
         ),
-    async execute(interaction: ChatInputCommandInteraction) {
+    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
         const targetUser = interaction.options.getUser('user') as User;
         const amount = interaction.options.getInteger('amount');
 
@@ -49,22 +49,12 @@ module.exports = {
         }
 
         try {
-            const res = await fetch(`${process.env.API_URL || "http://localhost:3000"}/api/users/transfer-credits`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    targetUserId: targetUser.id,
-                    amount
-                }),
-            });
-            const data = await res.json();
+            // Use CroissantAPI instead of fetch
+            const res = await croissantAPI.users.transferCredits(targetUser.id, amount);
 
-            if (!res.ok) {
+            if (!res || res.message?.toLowerCase().includes("error")) {
                 await interaction.reply({
-                    content: data.message || "Error while transferring credits.",
+                    content: res?.message || "Error while transferring credits.",
                     ephemeral: true
                 });
                 return;

@@ -19,14 +19,15 @@ const command = {
     .setName("View Inventory")
     .setType(ApplicationCommandType.User),
 
-  async execute(interaction: ContextMenuCommandInteraction) {
+  async execute(interaction: ContextMenuCommandInteraction, croissantAPI: CroissantAPI) {
     if (!interaction.isUserContextMenuCommand()) return;
 
     try {
       const user: User = interaction.targetUser;
 
       await interaction.deferReply({ ephemeral: false });
-      const inventoryData = await CroissantAPI.inventory.get(user.id);
+      // Use the croissantAPI instance passed to the command, not the class directly
+      const inventoryData = await croissantAPI.inventory.get(user.id);
 
       if (!inventoryData || inventoryData.length === 0) {
         await interaction.editReply({
@@ -53,7 +54,7 @@ const command = {
           itemsToShow
             .map(
               (item) =>
-                `${item.emoji ?? "📦"} **${item.name}**${item.amount ? ` x${item.amount}` : ""}`
+                `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
             )
             .join("\n")
         );
@@ -126,7 +127,7 @@ const command = {
             itemsToShow
               .map(
                 (item) =>
-                  `${item.emoji ?? "📦"} **${item.name}**${item.amount ? ` x${item.amount}` : ""}`
+                  `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
               )
               .join("\n")
           );

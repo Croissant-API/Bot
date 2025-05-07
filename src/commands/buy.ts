@@ -2,7 +2,7 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder, AutocompleteInteraction } from 'discord.js';
 import fetch from 'node-fetch';
 import { emojis, genKey } from '../utils';
-import { CroissantAPI, IItem } from '../libs/croissant-api';
+import { CroissantAPI, Item } from '../libs/croissant-api';
 import { config } from 'dotenv';
 import path from 'path';
 config({ path: path.join(__dirname,'../../.env') }); // Load environment variables from .env file
@@ -23,29 +23,29 @@ module.exports = {
                 .setDescription('The amount to buy')
                 .setRequired(false)
         ),
-    async autocomplete(interaction: AutocompleteInteraction) {
+    async autocomplete(interaction: AutocompleteInteraction, croissantAPI: CroissantAPI) {
         const focusedValue = interaction.options.getFocused();
-        let items: IItem[];
+        let items: Item[];
         try {
-            items = await CroissantAPI.items.get() as IItem[];
+            items = await croissantAPI.items.list() as Item[];
         } catch {
             // fallback: no suggestions
             return interaction.respond([]);
         }
         const filtered = items
-            .filter((item: IItem) =>
+            .filter((item: Item) =>
                 item.name && 
                 (item.name.toLowerCase().includes(focusedValue.toLowerCase()) ||
                 item.itemId.toLowerCase().includes(focusedValue.toLowerCase()))
             )
             .slice(0, 25)
-            .map((item: IItem) => ({
+            .map((item: Item) => ({
                 name: item.name,
                 value: item.itemId
             }));
         await interaction.respond(filtered);
     },
-    async execute(interaction: ChatInputCommandInteraction) {
+    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
         const itemId = interaction.options.getString('itemid');
         const amount = Math.abs(interaction.options.getInteger('amount') || 1);
 
@@ -57,8 +57,8 @@ module.exports = {
             return;
         }
 
-        const items = await CroissantAPI.items.get() as IItem[];
-        const item = items.find((item: IItem) => item.itemId === itemId || item.name === itemId);
+        const items = await croissantAPI.items.list() as Item[];
+        const item = items.find((item: Item) => item.itemId === itemId || item.name === itemId);
         // console.log('Item:', item);
         if (!item) {
             await interaction.reply({

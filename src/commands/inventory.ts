@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SlashCommandBuilder, ChatInputCommandInteraction, User, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from "discord.js";
-import { CroissantAPI } from "../libs/croissant-api";
+import { CroissantAPI, InventoryItem } from "../libs/croissant-api";
 
 const ITEMS_PER_PAGE = 15;
-
 const command = {
   data: new SlashCommandBuilder()
     .setName("inventory")
@@ -15,13 +14,14 @@ const command = {
         .setRequired(false)
     ),
 
-  async execute(interaction: ChatInputCommandInteraction) {
+  async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
     try {
       const user: User = interaction.options.getUser("user") ?? interaction.user;
 
       await interaction.deferReply({ ephemeral: false });
-      const inventoryData = await CroissantAPI.inventory.get(user.id);
-
+      // Use the croissantAPI instance passed to the command, not the class directly
+      const inventoryData = await croissantAPI.inventory.get(interaction.user.id) as InventoryItem[];
+      
       if (!inventoryData || inventoryData.length === 0) {
         await interaction.editReply({
           content: `:open_file_folder: **${user.username}**'s inventory is empty.`,
@@ -48,7 +48,7 @@ const command = {
           itemsToShow
             .map(
               (item) =>
-                `${item.emoji ?? "📦"} **${item.name}**${item.amount ? ` x${item.amount}` : ""}`
+                `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
             )
             .join("\n")
         );
@@ -123,7 +123,7 @@ const command = {
             itemsToShow
               .map(
                 (item) =>
-                  `${item.emoji ?? "📦"} **${item.name}**${item.amount ? ` x${item.amount}` : ""}`
+                  `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
               )
               .join("\n")
           );

@@ -6,7 +6,7 @@ import {
     ComponentType,
     TextInputStyle
 } from "discord.js";
-import { CroissantAPI, IItem } from "../libs/croissant-api";
+import { CroissantAPI, Item } from "../libs/croissant-api";
 import { emojis } from "../utils";
 
 const ITEMS_PER_PAGE = 9;
@@ -16,13 +16,13 @@ const command = {
         .setName("shop")
         .setDescription("Displays the item shop"),
 
-    async execute(interaction: ChatInputCommandInteraction) {
+    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
         await interaction.deferReply({ ephemeral: false });
 
         // Fetch items from API (only those shown in store)
-        let items: IItem[] = [];
+        let items: Item[] = [];
         try {
-            items = await CroissantAPI.items.get() as IItem[];
+            items = await croissantAPI.items.list() as Item[];
         } catch (error: Error | unknown) {
             console.error("Error while fetching shop items:", error);
             await interaction.editReply({
@@ -245,7 +245,7 @@ const command = {
                 });
 
                 if (confirmation.customId === "confirm_buy") {
-                    // --- PURCHASE LOGIC (inspired by buy.ts) ---
+                    // --- PURCHASE LOGIC (using CroissantAPI) ---
                     try {
                         const { genKey } = await import("../utils");
                         const token = await genKey(interaction.user.id);
@@ -257,23 +257,12 @@ const command = {
                             return;
                         }
 
-                        const fetch = (await import("node-fetch")).default;
-                        const buyRes = await fetch(
-                            `${process.env.API_URL || "http://localhost:3000"}/api/items/buy/${selectedItem.itemId}`,
-                            {
-                                method: "POST",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                    Authorization: `Bearer ${token}`,
-                                },
-                                body: JSON.stringify({ amount: 1 }),
-                            }
-                        );
-                        const buyData = await buyRes.json();
+                        // Use CroissantAPI to buy the item
+                        const buyRes = await croissantAPI.items.buy(selectedItem.itemId, 1);
 
-                        if (!buyRes.ok) {
+                        if (!buyRes || buyRes.message?.toLowerCase().includes("error")) {
                             await confirmation.update({
-                                content: buyData.message || "Failed to purchase the item.",
+                                content: buyRes?.message || "Failed to purchase the item.",
                                 components: [],
                             });
                             return;

@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ChatInputCommandInteraction, SlashCommandBuilder, AutocompleteInteraction } from 'discord.js';
-import fetch from 'node-fetch';
 import { emojis, genKey } from '../utils';
-import { CroissantAPI, IItem } from '../libs/croissant-api';
+import { CroissantAPI, Item } from '../libs/croissant-api';
 import { config } from 'dotenv';
 import path from 'path';
 config({ path: path.join(__dirname,'../../.env') }); // Load environment variables from .env file
@@ -23,29 +22,29 @@ module.exports = {
                 .setDescription('The amount to buy')
                 .setRequired(false)
         ),
-    async autocomplete(interaction: AutocompleteInteraction) {
+    async autocomplete(interaction: AutocompleteInteraction, croissantAPI: CroissantAPI) {
         const focusedValue = interaction.options.getFocused();
-        let items: IItem[];
+        let items: Item[];
         try {
-            items = await CroissantAPI.items.get() as IItem[];
+            items = await croissantAPI.items.list() as Item[];
         } catch {
             // fallback: no suggestions
             return interaction.respond([]);
         }
         const filtered = items
-            .filter((item: IItem) =>
+            .filter((item: Item) =>
                 item.name && 
                 (item.name.toLowerCase().includes(focusedValue.toLowerCase()) ||
                 item.itemId.toLowerCase().includes(focusedValue.toLowerCase()))
             )
             .slice(0, 25)
-            .map((item: IItem) => ({
+            .map((item: Item) => ({
                 name: item.name,
                 value: item.itemId
             }));
         await interaction.respond(filtered);
     },
-    async execute(interaction: ChatInputCommandInteraction) {
+    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
         const itemId = interaction.options.getString('itemid');
         const amount = Math.abs(interaction.options.getInteger('amount') || 1);
 
@@ -57,8 +56,8 @@ module.exports = {
             return;
         }
 
-        const items = await CroissantAPI.items.get() as IItem[];
-        const item = items.find((item: IItem) => item.itemId === itemId || item.name === itemId);
+        const items = await croissantAPI.items.list() as Item[];
+        const item = items.find((item: Item) => item.itemId === itemId || item.name === itemId);
         // console.log('Item:', item);
         if (!item) {
             await interaction.reply({
@@ -115,28 +114,29 @@ module.exports = {
 
             collector.on('collect', async (i: any) => {
                 if (i.customId === 'confirm_sell') {
-                    const sellRes = await fetch(`${process.env.API_URL || 'http://localhost:3000'}/api/items/sell/${item.itemId}`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({ amount })
-                    });
-                    const sellData = await sellRes.json();
+                    try {
+                        // Use CroissantAPI to sell the item
+                        const sellRes = await croissantAPI.items.sell(item.itemId, amount);
 
-                    if (!sellRes.ok) {
+                        if (!sellRes || sellRes.message?.toLowerCase().includes("error")) {
+                            await i.update({
+                                content: sellRes?.message || 'Failed to sell item.',
+                                components: []
+                            });
+                            return;
+                        }
+
                         await i.update({
-                            content: sellData.message || 'Failed to sell item.',
+                            content: `Successfully sold \`${item.name}\` for ${item.price * amount} ${emojis.credits}!`,
                             components: []
                         });
-                        return;
+                    } catch (err: Error | unknown) {
+                        console.error('Error while selling item:', err);
+                        await i.update({
+                            content: 'Failed to sell item.',
+                            components: []
+                        });
                     }
-
-                    await i.update({
-                        content: `Successfully sold \`${item.name}\` for ${item.price * amount} ${emojis.credits}!`,
-                        components: []
-                    });
                 } else {
                     await i.update({
                         content: 'Sell cancelled.',
