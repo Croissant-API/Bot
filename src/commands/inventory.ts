@@ -17,8 +17,10 @@ const command = {
   async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
     try {
       const user = interaction.options.getUser("user") ?? interaction.user;
-      const croissantUser = await croissantAPI.users.getUser(user.id);
-      if (!croissantUser) {
+      try {
+        await croissantAPI.users.getUser(user.id);
+      } catch (error) {
+        console.error("Error fetching user:", error);
         await croissantAPI.users.create({
           id: user.id,
           username: user.username
