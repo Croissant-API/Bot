@@ -27,7 +27,7 @@ const command = {
       const croissantUser = await croissantAPI.users.getUser(user.id);
       if (!croissantUser) {
         await croissantAPI.users.create({
-          id: user.id,
+          userId: user.id,
           username: user.username
         });
       }
