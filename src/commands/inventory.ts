@@ -17,16 +17,16 @@ const command = {
   async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
     try {
       const user = interaction.options.getUser("user") ?? interaction.user;
-      const croissantUser = await croissantAPI.users.getUser(interaction.user.id);
+      const croissantUser = await croissantAPI.users.getUser(user.id);
       if (!croissantUser) {
         await croissantAPI.users.create({
-          id: interaction.user.id,
-          username: interaction.user.username
+          id: user.id,
+          username: user.username
         });
       }
       await interaction.deferReply({ ephemeral: false });
       // Use the croissantAPI instance passed to the command, not the class directly
-      const inventoryData = await croissantAPI.inventory.get(interaction.user.id) as InventoryItem[];
+      const inventoryData = await croissantAPI.inventory.get(user.id) as InventoryItem[];
       
       if (!inventoryData || inventoryData.length === 0) {
         await interaction.editReply({
