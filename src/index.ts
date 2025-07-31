@@ -4,7 +4,7 @@ import * as path from "node:path";
 import dotenv from "dotenv";
 import { Command, Config } from "./types";
 import { genKey } from "./utils";
-import CroissantAPI, { User } from "./libs/croissant-api";
+import CroissantAPI from "./libs/croissant-api";
 
 declare module "discord.js" {
   export interface Client {
@@ -104,10 +104,10 @@ client.on("interactionCreate", async (interaction: Interaction) => {
             return;
         }
         const croissantApi = new CroissantAPI({token});
-        const user = await croissantApi.users.getUser(interaction.targetUser.id);
-        if (!user) {
-          await croissantApi.users.create(interaction.targetUser as unknown as User);
-        }
+        // const user = await croissantApi.users.getUser(interaction.targetUser.id);
+        // if (!user) {
+        //   await croissantApi.users.create(interaction.targetUser as unknown as User);
+        // }
         await command.execute(interaction, croissantApi);
       } catch (error) {
         console.error(`Error executing ${interaction.commandName}:`, error);
@@ -137,10 +137,10 @@ client.on("interactionCreate", async (interaction: Interaction) => {
           return;
       }
       const croissantApi: CroissantAPI = new CroissantAPI({token});
-      const user = await croissantApi.users.getUser(interaction.user.id);
-      if (!user) {
-        await croissantApi.users.create(interaction.user as unknown as User);
-      }
+      // const user = await croissantApi.users.getUser(interaction.user.id);
+      // if (!user) {
+      //   await croissantApi.users.create(interaction.user as unknown as User);
+      // }
       await command.execute(interaction, croissantApi);
     } catch (error) {
       console.error(`Error executing ${interaction.commandName}:`, error);

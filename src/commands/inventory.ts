@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from "discord.js";
-import { CroissantAPI, InventoryItem } from "../libs/croissant-api";
+import { CroissantAPI } from "../libs/croissant-api";
 
 const ITEMS_PER_PAGE = 15;
 const command = {
@@ -18,16 +18,15 @@ const command = {
     try {
       const user = interaction.options.getUser("user") ?? interaction.user;
       const croissantUser = await croissantAPI.users.getUser(user.id);
-      if (!croissantUser) {
-        await croissantAPI.users.create({
-          userId: user.id,
-          username: user.username
-        });
-      }
+
       await interaction.deferReply({ ephemeral: false });
+      // console.log(`Displaying page ${page} of ${totalPages} for user ${user.username}`, inventoryData);
+
       // Use the croissantAPI instance passed to the command, not the class directly
-      const inventoryData = await croissantAPI.inventory.get(user.id) as InventoryItem[];
-      
+      const inventoryResponse = await croissantAPI.inventory.get(croissantUser.userId);
+      const inventoryData = inventoryResponse.inventory;
+      // console.log(`Fetched inventory for user ${user.username}:`, inventoryData);
+
       if (!inventoryData || inventoryData.length === 0) {
         await interaction.editReply({
           content: `:open_file_folder: **${user.username}**'s inventory is empty.`,
@@ -167,7 +166,7 @@ const command = {
 
       collector.on("end", async () => {
         // if (message.editable) {
-          await interaction.editReply({ components: [] });
+        await interaction.editReply({ components: [] });
         // }
       });
     } catch (error) {
