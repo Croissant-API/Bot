@@ -8,15 +8,20 @@ import { Client } from "discord.js";
 // Chargement de la configuration .env
 dotenv.config({ path: path.join(__dirname, ".env") });
 
+const ALGO = "aes-256-cbc";
+const IV_LENGTH = 16;
+
 /**
- * Génère une clé unique basée sur l'userId et un secret.
+ * Encrypts the userId for API key generation (new method).
  */
 export function genKey(userId: string): string {
-  if (!userId) throw new Error("userId is required for key generation");
-  return crypto
-    .createHash("md5")
-    .update(userId + userId + process.env.HASH_SECRET)
-    .digest("hex");
+  const SECRET = process.env.HASH_SECRET!;
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const key = crypto.createHash("sha256").update(SECRET).digest(); // 32 bytes
+  const cipher = crypto.createCipheriv(ALGO, key, iv);
+  let encrypted = cipher.update(userId, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  return iv.toString("hex") + ":" + encrypted;
 }
 
 /**

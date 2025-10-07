@@ -12,6 +12,8 @@ declare module "discord.js" {
 
 dotenv.config();
 
+const dryCroissantApi = new CroissantAPI();
+
 const config: Config = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN || "",
 };
@@ -51,7 +53,8 @@ client.on("interactionCreate", async (interaction: Interaction) => {
   }
 
   try {
-    const token = await genKey(interaction.user.id);
+    const realUser = await dryCroissantApi.users.getUser(interaction.user.id)
+    const token = await genKey(realUser.userId);
     if (!token) {
       await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
       return;
