@@ -3,6 +3,54 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionR
 import { CroissantAPI } from "../libs/croissant-api";
 
 const ITEMS_PER_PAGE = 15;
+
+function buildInventoryEmbed(user: any, items: any[], page: number, totalPages: number) {
+  const embed = new EmbedBuilder()
+    .setTitle(`${user.username}'s Inventory`)
+    .setColor(0xFF69B4)
+    .setThumbnail(user.displayAvatarURL())
+    .setFooter({ text: `Page ${page} of ${totalPages}` });
+
+  if (items.length > 0) {
+    embed.setDescription(
+      items
+        .map(
+          (item) =>
+            `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
+        )
+        .join("\n")
+    );
+  } else {
+    embed.setDescription("No items to display on this page.");
+  }
+  return embed;
+}
+
+function buildInventoryButtons(page: number, totalPages: number) {
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  if (totalPages > 1) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId("prev")
+        .setLabel("Previous")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page === 1),
+      new ButtonBuilder()
+        .setCustomId("next")
+        .setLabel("Next")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page === totalPages)
+    );
+  }
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId("close")
+      .setLabel("Close")
+      .setStyle(ButtonStyle.Danger)
+  );
+  return row;
+}
+
 const command = {
   data: new SlashCommandBuilder()
     .setName("inventory")
@@ -20,12 +68,9 @@ const command = {
       const croissantUser = await croissantAPI.users.getUser(user.id);
 
       await interaction.deferReply({ ephemeral: false });
-      // console.log(`Displaying page ${page} of ${totalPages} for user ${user.username}`, inventoryData);
 
-      // Use the croissantAPI instance passed to the command, not the class directly
       const inventoryResponse = await croissantAPI.inventory.get(croissantUser.userId);
       const inventoryData = inventoryResponse.inventory;
-      // console.log(`Fetched inventory for user ${user.username}:`, inventoryData);
 
       if (!inventoryData || inventoryData.length === 0) {
         await interaction.editReply({
@@ -37,56 +82,16 @@ const command = {
       let page = 1;
       const totalPages = Math.ceil(inventoryData.length / ITEMS_PER_PAGE);
 
-      // Build the embed and action row inline
       const start = (page - 1) * ITEMS_PER_PAGE;
       const end = start + ITEMS_PER_PAGE;
       const itemsToShow = inventoryData.slice(start, end);
 
-      const embed = new EmbedBuilder()
-        .setTitle(`${user.username}'s Inventory`)
-        .setColor(0xFF69B4) // Pink color (hex for Hot Pink)
-        .setThumbnail(user.displayAvatarURL())
-        .setFooter({ text: `Page ${page} of ${totalPages}` });
-
-      if (itemsToShow.length > 0) {
-        embed.setDescription(
-          itemsToShow
-            .map(
-              (item) =>
-                `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
-            )
-            .join("\n")
-        );
-      } else {
-        embed.setDescription("No items to display on this page.");
-      }
-
-      const row = new ActionRowBuilder<ButtonBuilder>();
-      if (totalPages > 1) {
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId("prev")
-            .setLabel("Previous")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === 1),
-          new ButtonBuilder()
-            .setCustomId("next")
-            .setLabel("Next")
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === totalPages)
-        );
-      }
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId("close")
-          .setLabel("Close")
-          .setStyle(ButtonStyle.Danger)
-      );
+      const embed = buildInventoryEmbed(user, itemsToShow, page, totalPages);
+      const row = buildInventoryButtons(page, totalPages);
 
       const message = await interaction.editReply({
         embeds: [embed],
         components: totalPages > 1 ? [row.toJSON() as any] : [],
-        // fetchReply: true,
       });
 
       if (totalPages <= 1) return;
@@ -112,51 +117,12 @@ const command = {
           return;
         }
 
-        // Update embed and row inline
         const start = (page - 1) * ITEMS_PER_PAGE;
         const end = start + ITEMS_PER_PAGE;
         const itemsToShow = inventoryData.slice(start, end);
 
-        const embed = new EmbedBuilder()
-          .setTitle(`${user.username}'s Inventory`)
-          .setColor(0xFF69B4) // Pink color (hex for Hot Pink)
-          .setThumbnail(user.displayAvatarURL())
-          .setFooter({ text: `Page ${page} of ${totalPages}` });
-
-        if (itemsToShow.length > 0) {
-          embed.setDescription(
-            itemsToShow
-              .map(
-                (item) =>
-                  `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
-              )
-              .join("\n")
-          );
-        } else {
-          embed.setDescription("No items to display on this page.");
-        }
-
-        const row = new ActionRowBuilder<ButtonBuilder>();
-        if (totalPages > 1) {
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId("prev")
-              .setLabel("Previous")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(page === 1),
-            new ButtonBuilder()
-              .setCustomId("next")
-              .setLabel("Next")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(page === totalPages)
-          );
-        }
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId("close")
-            .setLabel("Close")
-            .setStyle(ButtonStyle.Danger)
-        );
+        const embed = buildInventoryEmbed(user, itemsToShow, page, totalPages);
+        const row = buildInventoryButtons(page, totalPages);
 
         await btn.update({
           embeds: [embed],
@@ -165,9 +131,7 @@ const command = {
       });
 
       collector.on("end", async () => {
-        // if (message.editable) {
         await interaction.editReply({ components: [] });
-        // }
       });
     } catch (error) {
       console.error("Error while fetching inventory:", error);

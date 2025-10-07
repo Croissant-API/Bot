@@ -1,9 +1,7 @@
 import { Client, Collection, Interaction } from "discord.js";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import dotenv from "dotenv";
 import { Command, Config } from "./types";
-import { genKey } from "./utils";
+import { genKey, loadCommands, registerCommands, clearExistingCommands } from "./utils";
 import CroissantAPI from "./libs/croissant-api";
 
 declare module "discord.js" {
@@ -21,42 +19,10 @@ const config: Config = {
 const client = new Client({ intents: [] });
 client.commands = new Collection<string, Command>();
 
-async function loadCommands(client: Client): Promise<void> {
-  const commandsPath = path.join(__dirname, "commands");
-  const commandFiles = fs.readdirSync(commandsPath);
-
-  for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = await import(filePath).then((m) => m.default || m);
-    if ("data" in command && "execute" in command) {
-      client.commands.set(command.data.name, command);
-      console.log(`Loaded command: ${command.data.name}`);
-    } else {
-      console.warn(`[WARNING] The command at ${filePath} is missing "data" or "execute".`);
-    }
-  }
-}
-
-async function registerCommands(client: Client): Promise<void> {
-  try {
-    const commands = client.application?.commands;
-    if (!commands) return;
-
-    for (const command of client.commands.values() as IterableIterator<Command>) {
-      await commands.create({
-        ...command.data.toJSON(),
-        integration_types: [0, 1],
-        contexts: [0, 1, 2],
-      });
-    }
-    console.log("Successfully registered application commands.");
-  } catch (error) {
-    console.error("Failed to register application commands:", error);
-  }
-}
-
 client.on("ready", async () => {
   console.log(`Logged in as ${client.user?.tag}!`);
+  if (process.env.CLEAR_COMMANDS)
+    await clearExistingCommands(client);
   await loadCommands(client);
   await registerCommands(client);
 });
