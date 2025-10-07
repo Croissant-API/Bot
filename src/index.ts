@@ -1,7 +1,7 @@
 import { Client, Collection, Interaction } from "discord.js";
 import dotenv from "dotenv";
 import { Command, Config } from "./types";
-import { genKey, loadCommands, registerCommands, clearExistingCommands } from "./utils";
+import { genKey, loadCommands, registerCommands } from "./utils";
 import CroissantAPI from "./libs/croissant-api";
 
 declare module "discord.js" {
@@ -21,8 +21,8 @@ client.commands = new Collection<string, Command>();
 
 client.on("ready", async () => {
   console.log(`Logged in as ${client.user?.tag}!`);
-  if (process.env.CLEAR_COMMANDS)
-    await clearExistingCommands(client);
+  // if (process.env.CLEAR_COMMANDS)
+  //   await clearExistingCommands(client);
   await loadCommands(client);
   await registerCommands(client);
 });

@@ -30,6 +30,7 @@ export interface Game {
  * User object as returned by the API.
  */
 export interface User {
+    badges: string[];
     userId: string;
     username: string;
     email?: string;

@@ -31,6 +31,16 @@ export function sleep(ms: number): Promise<void> {
  */
 export const emojis = {
   credits: "<:credit:1369444764906164316>",
+  verified: "<:verified:1398991338799890463>",
+  brandVerified: "<:brandverified:1398991334701797407>",
+  admin: "<:admin:1398991333120675941>",
+  earlyUser: "<:early_user:1425082856564199497>",
+  moderator: "<:moderator:1425082866936582265>",
+  partner: "<:partner:1425082861018677258>",
+  staff: "<:staff:1425082850168012871>",
+  contributor: "<:contributor:1425082858535653438>",
+  communityManager: "<:cm:1425082865443668091>",
+  bugHunter: "<:bug_hunter:1425082863480471614>",
 };
 
 /**
