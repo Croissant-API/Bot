@@ -23,10 +23,12 @@ const command = {
 
             // Determine main certification (shown in title)
             let certif = "";
-            switch (true) {
-                case user.verified && user.admin: certif = emojis.admin; break;
-                case user.verified && user.isStudio: certif = emojis.brandVerified; break;
-                case user.verified: certif = emojis.verified; break;
+            if (user.verified && user.admin) {
+                certif = emojis.admin;
+            } else if (user.verified && user.isStudio) {
+                certif = emojis.brandVerified;
+            } else if (user.verified) {
+                certif = emojis.verified;
             }
 
             // Prepare other badges (excluding certif)
@@ -57,7 +59,7 @@ const command = {
                 `🛍️ Owned items: ${user.ownedItems?.length ?? 0} created items`,
                 `🎒 Inventory: ${user.inventory?.length ?? 0} items`,
                 `🏢 Studios: ${user.studios?.length ?? 0} studios`,
-                `💰 Credits: ${user.balance ?? 0} ${emojis.credits}`,
+                // `💰 Credits: ${user.balance ?? 0} ${emojis.credits}`,
             ].join("\n");
 
             // Embed
