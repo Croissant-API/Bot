@@ -8,7 +8,7 @@ import CroissantAPI from "./libs/croissant-api";
 
 declare module "discord.js" {
   export interface Client {
-    commands: Collection<unknown, unknown>;
+    commands: Collection<string, Command>;
   }
 }
 
@@ -18,43 +18,25 @@ const config: Config = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN || "",
 };
 
-// Initialize Discord Client
 const client = new Client({ intents: [] });
-
-// Store commands in a collection
 client.commands = new Collection<string, Command>();
 
-// Load commands from files
 async function loadCommands(client: Client): Promise<void> {
   const commandsPath = path.join(__dirname, "commands");
   const commandFiles = fs.readdirSync(commandsPath);
 
-  // Delete all existing commands before loading new ones
-  // Delete all existing commands at once before loading new ones
-  // if (client.application?.commands) {
-  //   const existingCommands = await client.application.commands.fetch();
-  //   if (existingCommands.size > 0) {
-  //     await client.application.commands.set([]);
-  //     console.log("Deleted all existing commands at once.");
-  //   }
-  // }
-
   for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
     const command = await import(filePath).then((m) => m.default || m);
-
     if ("data" in command && "execute" in command) {
       client.commands.set(command.data.name, command);
       console.log(`Loaded command: ${command.data.name}`);
     } else {
-      console.warn(
-        `[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`,
-      );
+      console.warn(`[WARNING] The command at ${filePath} is missing "data" or "execute".`);
     }
   }
 }
 
-// Register commands to Discord API
 async function registerCommands(client: Client): Promise<void> {
   try {
     const commands = client.application?.commands;
@@ -73,116 +55,55 @@ async function registerCommands(client: Client): Promise<void> {
   }
 }
 
-// Event: Client is ready
 client.on("ready", async () => {
   console.log(`Logged in as ${client.user?.tag}!`);
   await loadCommands(client);
   await registerCommands(client);
 });
 
-// Event: Interaction Create (Slash Commands)
 client.on("interactionCreate", async (interaction: Interaction) => {
-  if (interaction.isCommand()) {
+  if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
+
+  if (interaction.isAutocomplete()) {
     const command = client.commands.get(interaction.commandName) as Command;
-
-    if (interaction.isUserContextMenuCommand()) {
-      const command = client.commands.get(interaction.commandName) as Command;
-      if (!command) {
-        console.error(
-          `No command matching ${interaction.commandName} was found.`,
-        );
-        await interaction.reply({
-          content: "Command not found!",
-          ephemeral: true,
-        });
-        return;
-      }
-      try {
-        const token = await genKey(interaction.user.id);
-        if (!token) {
-            await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
-            return;
-        }
-        const croissantApi = new CroissantAPI({token});
-        // const user = await croissantApi.users.getUser(interaction.targetUser.id);
-        // if (!user) {
-        //   await croissantApi.users.create(interaction.targetUser as unknown as User);
-        // }
-        await command.execute(interaction, croissantApi);
-      } catch (error) {
-        console.error(`Error executing ${interaction.commandName}:`, error);
-        await interaction.reply({
-          content: "There was an error while executing this command!",
-          ephemeral: true,
-        });
-      }
-      return;
-    }
-
-    if (!command) {
-      console.error(
-        `No command matching ${interaction.commandName} was found.`,
-      );
-      await interaction.reply({
-        content: "Command not found!",
-        ephemeral: true,
-      });
-      return;
-    }
-
+    if (!command || !command.autocomplete) return;
     try {
       const token = await genKey(interaction.user.id);
-      if (!token) {
-          await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
-          return;
-      }
-      const croissantApi: CroissantAPI = new CroissantAPI({token});
-      // const user = await croissantApi.users.getUser(interaction.user.id);
-      // if (!user) {
-      //   await croissantApi.users.create(interaction.user as unknown as User);
-      // }
-      await command.execute(interaction, croissantApi);
-    } catch (error) {
-      console.error(`Error executing ${interaction.commandName}:`, error);
-      await interaction.reply({
-        content: "There was an error while executing this command!",
-        ephemeral: true,
-      });
-    }
-  } else if (interaction.isAutocomplete()) {
-    const command = client.commands.get(interaction.commandName) as Command;
-
-    if (!command || !command.autocomplete) {
-      console.error(
-        `No command matching ${interaction.commandName} was found.`,
-      );
-      return;
-    }
-
-    try {
-      const token = await genKey(interaction.user.id);
-      const croissantApi = new CroissantAPI({token});
+      const croissantApi = new CroissantAPI({ token });
       await command.autocomplete(interaction, croissantApi);
     } catch (error) {
-      console.error(
-        `Error executing autocomplete for ${interaction.commandName}:`,
-        error,
-      );
+      console.error(`Error executing autocomplete for ${interaction.commandName}:`, error);
     }
+    return;
+  }
+
+  const command = client.commands.get(interaction.commandName) as Command;
+  if (!command) {
+    console.error(`No command matching ${interaction.commandName} was found.`);
+    await interaction.reply({ content: "Command not found!", ephemeral: true });
+    return;
+  }
+
+  try {
+    const token = await genKey(interaction.user.id);
+    if (!token) {
+      await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
+      return;
+    }
+    const croissantApi = new CroissantAPI({ token });
+    await command.execute(interaction, croissantApi);
+  } catch (error) {
+    console.error(`Error executing ${interaction.commandName}:`, error);
+    await interaction.reply({ content: "There was an error while executing this command!", ephemeral: true });
   }
 });
 
-// Log in to Discord with your client's token
 client.login(config.DISCORD_TOKEN);
 
-// Error handling
 process.on("uncaughtException", (error: Error) => {
   console.error("🚨 Uncaught Exception: An error occurred!", error);
 });
 
-process.on(
-  "unhandledRejection",
-  (reason: unknown, promise: Promise<unknown>) => {
-    console.warn("⚠️ Unhandled Rejection at:", promise, "reason:", reason);
-  },
-);
+process.on("unhandledRejection", (reason: unknown, promise: Promise<unknown>) => {
+  console.warn("⚠️ Unhandled Rejection at:", promise, "reason:", reason);
+});
