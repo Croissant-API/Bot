@@ -26,13 +26,14 @@ export interface DiscordInteraction {
   data: {
     name: string;
     options?: unknown[];
+    custom_id?: string; // For component interactions
   };
-  member: {
-    user: {
+  member?: {
+    user?: {
       id: string;
     };
   };
-  user: {
+  user?: {
     id: string;
   };
 }

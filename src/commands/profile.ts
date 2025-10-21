@@ -63,21 +63,43 @@ const command = {
                 }
             }
 
-            const content = `👤 **Profile of ${user.username} ${certif}**\n\n` +
-                `🏷️ **Badges:** ${badges.length ? badges.join(" ") : "None"}\n\n` +
-                `📊 **Statistics:**\n` +
-                `🎮 Games created: ${(user as User).createdGames?.length ?? 0}\n` +
-                `🛍️ Owned items: ${(user as User).ownedItems?.length ?? 0}\n` +
-                `🎒 Inventory: ${(user as User).inventory?.length ?? 0}\n` +
-                `🏢 Studios: ${(user as User).studios?.length ?? 0}\n\n` +
-                `� [View full profile](https://croissant-api.fr/profile?user=${user.userId})\n` +
-                `🖼️ [Avatar](https://croissant-api.fr/avatar/${user.userId})\n\n` +
-                `**Croissant ID:** \`${user.userId}\``;
+            // Create embed
+            const embed = {
+                title: `👤 Profile of ${user.username} ${certif}`,
+                color: 0x3498db,
+                thumbnail: {
+                    url: `https://croissant-api.fr/avatar/${user.userId}`
+                },
+                fields: [
+                    {
+                        name: "🏷️ Badges",
+                        value: badges.length ? badges.join(" ") : "None",
+                        inline: false
+                    },
+                    {
+                        name: "📊 Statistics",
+                        value: `🎮 Games created: ${(user as User).createdGames?.length ?? 0}\n` +
+                               `🛍️ Owned items: ${(user as User).ownedItems?.length ?? 0}\n` +
+                               `🎒 Inventory: ${(user as User).inventory?.length ?? 0}\n` +
+                               `🏢 Studios: ${(user as User).studios?.length ?? 0}`,
+                        inline: false
+                    },
+                    {
+                        name: "🔗 Links",
+                        value: `[View full profile](https://croissant-api.fr/profile?user=${user.userId})\n` +
+                               `[Avatar](https://croissant-api.fr/avatar/${user.userId})`,
+                        inline: false
+                    }
+                ],
+                footer: {
+                    text: `Croissant ID: ${user.userId}`
+                }
+            };
 
             return {
                 type: 4, // InteractionResponseType.ChannelMessageWithSource
                 data: {
-                    content: content
+                    embeds: [embed]
                 }
             };
         } catch (error) {
@@ -85,7 +107,11 @@ const command = {
             return {
                 type: 4, // InteractionResponseType.ChannelMessageWithSource
                 data: {
-                    content: "❌ **Profile not found**\n\nThis user does not have a Croissant profile or an error occurred.",
+                    embeds: [{
+                        title: "❌ Profile not found",
+                        description: "This user does not have a Croissant profile or an error occurred.",
+                        color: 0xff0000
+                    }],
                     flags: 64 // MessageFlags.Ephemeral
                 }
             };

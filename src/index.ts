@@ -61,6 +61,18 @@ async function handleInteraction(interaction: DiscordInteraction) {
     try {
       const userId = interaction.member?.user?.id || interaction.user?.id;
       
+      if (!userId) {
+        return new Response(JSON.stringify({
+          type: InteractionResponseType.ChannelMessageWithSource,
+          data: {
+            content: "❌ Unable to identify user.",
+            flags: MessageFlags.Ephemeral
+          }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
       // For get-token command, we don't need to authenticate with API first
       if (interaction.data.name === "get-token") {
         const result = await command.execute(interaction);
@@ -116,6 +128,113 @@ async function handleInteraction(interaction: DiscordInteraction) {
     }
   }
 
+  // Handle component interactions (buttons)
+  if (interaction.type === 3) { // InteractionType.MessageComponent
+    try {
+      const customId = interaction.data.custom_id;
+      
+      if (!customId) {
+        return new Response(JSON.stringify({
+          type: InteractionResponseType.ChannelMessageWithSource,
+          data: {
+            content: "❌ Invalid button interaction.",
+            flags: MessageFlags.Ephemeral
+          }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Handle inventory pagination buttons
+      if (customId.startsWith('inventory_')) {
+        const parts = customId.split('_');
+        const action = parts[1]; // prev, next, or page
+        const targetUserId = parts[2];
+        const pageNum = parseInt(parts[3]);
+        
+        if (action === 'prev' || action === 'next') {
+          const userId = interaction.member?.user?.id || interaction.user?.id;
+          
+          if (!userId) {
+            return new Response(JSON.stringify({
+              type: InteractionResponseType.ChannelMessageWithSource,
+              data: {
+                content: "❌ Unable to identify user.",
+                flags: MessageFlags.Ephemeral
+              }
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+          
+          const dryCroissantApi = new CroissantAPI();
+          const realUser = await dryCroissantApi.users.getUser(userId);
+          const token = genKey(realUser.userId);
+          
+          if (!token) {
+            return new Response(JSON.stringify({
+              type: InteractionResponseType.ChannelMessageWithSource,
+              data: {
+                content: "You are not authenticated. Please link your account.",
+                flags: MessageFlags.Ephemeral
+              }
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+
+          const croissantApi = new CroissantAPI({ token });
+          
+          // Simulate inventory command execution with specific page
+          const fakeInteraction = {
+            ...interaction,
+            data: {
+              name: 'inventory',
+              options: [
+                { name: 'user', value: targetUserId },
+                { name: 'page', value: pageNum }
+              ]
+            }
+          };
+          
+          const inventoryCommand = commands.get('inventory') as Command;
+          if (inventoryCommand) {
+            const result = await inventoryCommand.execute(fakeInteraction, croissantApi);
+            
+            return new Response(JSON.stringify({
+              type: 7, // InteractionResponseType.UpdateMessage
+              data: result.data
+            }), {
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+        }
+      }
+      
+      // Default response for unhandled component interactions
+      return new Response(JSON.stringify({
+        type: InteractionResponseType.ChannelMessageWithSource,
+        data: {
+          content: "❌ This button interaction is not supported.",
+          flags: MessageFlags.Ephemeral
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+    } catch (error) {
+      console.error('Error handling component interaction:', error);
+      return new Response(JSON.stringify({
+        type: InteractionResponseType.ChannelMessageWithSource,
+        data: {
+          content: "❌ There was an error processing this interaction.",
+          flags: MessageFlags.Ephemeral
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
 
   return new Response(JSON.stringify({
     type: InteractionResponseType.Pong
