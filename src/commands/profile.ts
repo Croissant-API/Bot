@@ -1,7 +1,7 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
-import { CroissantAPI } from "../libs/croissant-api";
+import { SlashCommandBuilder } from "discord.js";
+import CroissantAPI, { User } from "../libs/croissant-api";
+import { DiscordInteraction, InteractionResponse } from "../types";
 import { emojis } from "../utils";
-import { EmbedBuilder } from "discord.js";
 
 const command = {
     data: new SlashCommandBuilder()
@@ -14,27 +14,37 @@ const command = {
                 .setRequired(false)
         ),
 
-    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
+    async execute(interaction: DiscordInteraction, croissantAPI?: CroissantAPI): Promise<InteractionResponse> {
         try {
-            const member = interaction.options.getUser("member") || interaction.user;
-            const userId = member.id;
-            const user = await croissantAPI.users.getUser(userId);
-            console.log(user);
+            if (!croissantAPI) {
+                return {
+                    type: 4,
+                    data: {
+                        content: "❌ API not available.",
+                        flags: 64
+                    }
+                };
+            }
 
-            // Determine main certification (shown in title)
+            // Get target user ID (from options or current user)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const targetUserId = (interaction.data.options as any)?.[0]?.value || interaction.member?.user?.id || interaction.user?.id;
+            const user = await croissantAPI.users.getUser(targetUserId) as User;
+
+            // Determine main certification
             let certif = "";
             if (user.verified && user.admin) {
                 certif = emojis.admin;
-            } else if (user.verified && user.isStudio) {
+            } else if (user.verified && (user).isStudio) {
                 certif = emojis.brandVerified;
             } else if (user.verified) {
                 certif = emojis.verified;
             }
 
-            // Prepare other badges (excluding certif)
+            // Prepare badges
             const badges: string[] = [];
-            if (user.disabled) badges.push("🚫");
-            // Add possible Croissant badges
+            if ((user).disabled) badges.push("🚫");
+            
             const possibleBadges = [
                 { key: "staff", emoji: emojis.staff },
                 { key: "bug_hunter", emoji: emojis.bugHunter },
@@ -45,43 +55,40 @@ const command = {
                 { key: "early_user", emoji: emojis.earlyUser }
             ];
 
-            if (user.badges && Array.isArray(user.badges)) {
+            if ((user).badges && Array.isArray((user).badges)) {
                 for (const badge of possibleBadges) {
-                    if (user.badges.includes(badge.key)) {
+                    if ((user).badges.includes(badge.key)) {
                         badges.push(badge.emoji);
                     }
                 }
             }
 
-            // Statistics
-            const stats = [
-                `🎮 Games created: ${user.createdGames?.length ?? 0} games`,
-                `🛍️ Owned items: ${user.ownedItems?.length ?? 0} created items`,
-                `🎒 Inventory: ${user.inventory?.length ?? 0} items`,
-                `🏢 Studios: ${user.studios?.length ?? 0} studios`,
-                // `💰 Credits: ${user.balance ?? 0} ${emojis.credits}`,
-            ].join("\n");
+            const content = `👤 **Profile of ${user.username} ${certif}**\n\n` +
+                `🏷️ **Badges:** ${badges.length ? badges.join(" ") : "None"}\n\n` +
+                `📊 **Statistics:**\n` +
+                `🎮 Games created: ${(user as User).createdGames?.length ?? 0}\n` +
+                `🛍️ Owned items: ${(user as User).ownedItems?.length ?? 0}\n` +
+                `🎒 Inventory: ${(user as User).inventory?.length ?? 0}\n` +
+                `🏢 Studios: ${(user as User).studios?.length ?? 0}\n\n` +
+                `� [View full profile](https://croissant-api.fr/profile?user=${user.userId})\n` +
+                `🖼️ [Avatar](https://croissant-api.fr/avatar/${user.userId})\n\n` +
+                `**Croissant ID:** \`${user.userId}\``;
 
-            // Embed
-            const embed = new EmbedBuilder()
-                .setTitle(`Profile of ${user.username} ${certif}`)
-                .setThumbnail(`https://croissant-api.fr/avatar/${user.userId}`)
-                .addFields(
-                    { name: "Badges", value: badges.length ? badges.join("") : "None", inline: false },
-                    { name: "Statistics", value: stats, inline: false },
-                    { name: "View profile", value: `[Open profile](https://croissant-api.fr/profile?user=${user.userId})`, inline: false }
-                )
-                .setFooter({ text: `Croissant ID: ${user.userId}` });
-
-            await interaction.reply({ embeds: [embed], ephemeral: false });
+            return {
+                type: 4, // InteractionResponseType.ChannelMessageWithSource
+                data: {
+                    content: content
+                }
+            };
         } catch (error) {
-            console.error("Error while fetching profile:", error);
-            const notFoundEmbed = new EmbedBuilder()
-                .setTitle("Profile not found")
-                .setDescription("This user does not have a Croissant profile.")
-                .setColor(0xff0000);
-
-            await interaction.reply({ embeds: [notFoundEmbed], ephemeral: true });
+            console.error("Error fetching profile:", error);
+            return {
+                type: 4, // InteractionResponseType.ChannelMessageWithSource
+                data: {
+                    content: "❌ **Profile not found**\n\nThis user does not have a Croissant profile or an error occurred.",
+                    flags: 64 // MessageFlags.Ephemeral
+                }
+            };
         }
     },
 };

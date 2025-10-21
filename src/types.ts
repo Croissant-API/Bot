@@ -1,13 +1,12 @@
 import {
   AutocompleteInteraction,
-  ChatInputCommandInteraction,
-  SlashCommandBuilder,
+  SlashCommandBuilder
 } from "discord.js";
 import CroissantAPI from "./libs/croissant-api";
 
 export interface Command {
   data: SlashCommandBuilder | { name: string; description: string };
-  execute: (interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) => Promise<void | InteractionResponse>;
+  execute: (interaction: DiscordInteraction, croissantAPI?: CroissantAPI) => Promise<InteractionResponse>;
   autocomplete?: (interaction: AutocompleteInteraction, croissantAPI: CroissantAPI) => Promise<void>;
 }
 

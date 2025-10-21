@@ -1,55 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from "discord.js";
-import { CroissantAPI } from "../libs/croissant-api";
-
-const ITEMS_PER_PAGE = 15;
-
-function buildInventoryEmbed(user: any, items: any[], page: number, totalPages: number) {
-  const embed = new EmbedBuilder()
-    .setTitle(`${user.username}'s Inventory`)
-    .setColor(0xFF69B4)
-    .setThumbnail(user.displayAvatarURL())
-    .setFooter({ text: `Page ${page} of ${totalPages}` });
-
-  if (items.length > 0) {
-    embed.setDescription(
-      items
-        .map(
-          (item) =>
-            `**${item.name}**${item.amount ? ` x${item.amount}` : ""}`
-        )
-        .join("\n")
-    );
-  } else {
-    embed.setDescription("No items to display on this page.");
-  }
-  return embed;
-}
-
-function buildInventoryButtons(page: number, totalPages: number) {
-  const row = new ActionRowBuilder<ButtonBuilder>();
-  if (totalPages > 1) {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId("prev")
-        .setLabel("Previous")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page === 1),
-      new ButtonBuilder()
-        .setCustomId("next")
-        .setLabel("Next")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page === totalPages)
-    );
-  }
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId("close")
-      .setLabel("Close")
-      .setStyle(ButtonStyle.Danger)
-  );
-  return row;
-}
+import { SlashCommandBuilder } from "discord.js";
+import CroissantAPI, { InventoryItem } from "../libs/croissant-api";
+import { DiscordInteraction, InteractionResponse } from "../types";
 
 const command = {
   data: new SlashCommandBuilder()
@@ -62,82 +13,62 @@ const command = {
         .setRequired(false)
     ),
 
-  async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
+    async execute(interaction: DiscordInteraction, croissantAPI?: CroissantAPI): Promise<InteractionResponse> {
     try {
-      const user = interaction.options.getUser("user") ?? interaction.user;
-      const croissantUser = await croissantAPI.users.getUser(user.id);
+      if (!croissantAPI) {
+        return {
+          type: 4,
+          data: {
+            content: "❌ API not available.",
+            flags: 64
+          }
+        };
+      }
 
-      await interaction.deferReply({ ephemeral: false });
-
+      // Get target user ID (from options or current user)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const targetUserId = (interaction.data.options as any)?.[0]?.value || interaction.member?.user?.id || interaction.user?.id;
+      const croissantUser = await croissantAPI.users.getUser(targetUserId);
       const inventoryResponse = await croissantAPI.inventory.get(croissantUser.userId);
       const inventoryData = inventoryResponse.inventory;
 
       if (!inventoryData || inventoryData.length === 0) {
-        await interaction.editReply({
-          content: `:open_file_folder: **${user.username}**'s inventory is empty.`,
-        });
-        return;
+        return {
+          type: 4, // InteractionResponseType.ChannelMessageWithSource
+          data: {
+            content: `📦 **${croissantUser.username}'s Inventory**\n\n🔍 This inventory is empty.`
+          }
+        };
       }
 
-      let page = 1;
-      const totalPages = Math.ceil(inventoryData.length / ITEMS_PER_PAGE);
+      // Show first 15 items (basic pagination for HTTP)
+      const itemsToShow = inventoryData.slice(0, 15);
+      const hasMore = inventoryData.length > 15;
+      
+      const itemsList = itemsToShow
+        .map((item: InventoryItem) => `• **${item.name}**${item.amount ? ` ×${item.amount}` : ""}`)
+        .join("\n");
 
-      const start = (page - 1) * ITEMS_PER_PAGE;
-      const end = start + ITEMS_PER_PAGE;
-      const itemsToShow = inventoryData.slice(start, end);
+      const content = `📦 **${croissantUser.username}'s Inventory**\n\n` +
+        `${itemsList}\n\n` +
+        (hasMore ? `*... and ${inventoryData.length - 15} more items*\n\n` : "") +
+        `**Total items:** ${inventoryData.length}`;
 
-      const embed = buildInventoryEmbed(user, itemsToShow, page, totalPages);
-      const row = buildInventoryButtons(page, totalPages);
-
-      const message = await interaction.editReply({
-        embeds: [embed],
-        components: totalPages > 1 ? [row.toJSON() as any] : [],
-      });
-
-      if (totalPages <= 1) return;
-
-      const collector = message.createMessageComponentCollector({
-        componentType: ComponentType.Button,
-        time: 60_000,
-      });
-
-      collector.on("collect", async (btn) => {
-        if (btn.user.id !== interaction.user.id) {
-          await btn.reply({ content: "You cannot interact with this inventory.", ephemeral: true });
-          return;
+      return {
+        type: 4, // InteractionResponseType.ChannelMessageWithSource
+        data: {
+          content: content
         }
-
-        if (btn.customId === "prev" && page > 1) {
-          page--;
-        } else if (btn.customId === "next" && page < totalPages) {
-          page++;
-        } else if (btn.customId === "close") {
-          await btn.update({ components: [] });
-          collector.stop();
-          return;
-        }
-
-        const start = (page - 1) * ITEMS_PER_PAGE;
-        const end = start + ITEMS_PER_PAGE;
-        const itemsToShow = inventoryData.slice(start, end);
-
-        const embed = buildInventoryEmbed(user, itemsToShow, page, totalPages);
-        const row = buildInventoryButtons(page, totalPages);
-
-        await btn.update({
-          embeds: [embed],
-          components: totalPages > 1 ? [row.toJSON() as any] : [],
-        });
-      });
-
-      collector.on("end", async () => {
-        await interaction.editReply({ components: [] });
-      });
+      };
     } catch (error) {
-      console.error("Error while fetching inventory:", error);
-      await interaction.editReply({
-        content: "An error occurred while fetching the inventory.",
-      });
+      console.error("Error fetching inventory:", error);
+      return {
+        type: 4, // InteractionResponseType.ChannelMessageWithSource
+        data: {
+          content: "❌ An error occurred while fetching the inventory.",
+          flags: 64 // MessageFlags.Ephemeral
+        }
+      };
     }
   },
 };

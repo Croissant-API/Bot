@@ -1,6 +1,5 @@
 import { verifyKey } from "discord-interactions";
 import {
-  ChatInputCommandInteraction,
   Collection,
   InteractionResponseType,
   InteractionType,
@@ -12,6 +11,11 @@ import { genKey } from "./utils";
 
 
 // Import commands
+import getTokenCommand from "./commands/get-token";
+import helpCommand from "./commands/help";
+import inventoryCommand from "./commands/inventory";
+import lobbyCommand from "./commands/lobby";
+import profileCommand from "./commands/profile";
 
 declare global {
   interface Env {
@@ -29,8 +33,12 @@ declare module "discord.js" {
 
 const commands = new Collection<string, Command>();
 
-import helpCommand from "./commands/help";
-commands.set("help", helpCommand)
+// Register all commands
+commands.set("get-token", getTokenCommand);
+commands.set("help", helpCommand);
+commands.set("inventory", inventoryCommand);
+commands.set("lobby", lobbyCommand);
+commands.set("profile", profileCommand);
 
 async function handleInteraction(interaction: DiscordInteraction) {
   const dryCroissantApi = new CroissantAPI();
@@ -52,6 +60,16 @@ async function handleInteraction(interaction: DiscordInteraction) {
 
     try {
       const userId = interaction.member?.user?.id || interaction.user?.id;
+      
+      // For get-token command, we don't need to authenticate with API first
+      if (interaction.data.name === "get-token") {
+        const result = await command.execute(interaction);
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // For other commands, authenticate first
       const realUser = await dryCroissantApi.users.getUser(userId);
       const token = genKey(realUser.userId);
 
@@ -68,8 +86,7 @@ async function handleInteraction(interaction: DiscordInteraction) {
       }
 
       const croissantApi = new CroissantAPI({ token });
-
-      const result = await command.execute(interaction as unknown as ChatInputCommandInteraction, croissantApi);
+      const result = await command.execute(interaction, croissantApi);
 
 
       if (result) {

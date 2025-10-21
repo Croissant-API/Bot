@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { SlashCommandBuilder, ChatInputCommandInteraction } from "discord.js";
-import { CroissantAPI } from "../libs/croissant-api";
-import { EmbedBuilder } from "discord.js";
+import { SlashCommandBuilder } from "discord.js";
+import CroissantAPI from "../libs/croissant-api";
+import { DiscordInteraction, InteractionResponse } from "../types";
 
 const command = {
     data: new SlashCommandBuilder()
@@ -25,48 +25,96 @@ const command = {
                 .setDescription("Leave your current lobby")
         ),
 
-    async execute(interaction: ChatInputCommandInteraction, croissantAPI: CroissantAPI) {
-        const subcommand = interaction.options.getSubcommand();
-
+    async execute(interaction: DiscordInteraction, croissantAPI?: CroissantAPI): Promise<InteractionResponse> {
         try {
+            if (!croissantAPI) {
+                return {
+                    type: 4,
+                    data: {
+                        content: "❌ API not available.",
+                        flags: 64
+                    }
+                };
+            }
+             
+            const subcommand = (interaction.data.options as any)?.[0]?.name;
+
             if (subcommand === "info") {
-                // Get user's lobby
                 const lobby = await croissantAPI.lobbies.getMyLobby();
-                const embed = new EmbedBuilder()
-                    .setTitle("Lobby Info")
-                    .addFields(
-                        {
-                            name: "Members",
-                            value: lobby.users.length > 0
-                                ? lobby.users.map(u => `[${u.username}](https://croissant-api.fr/profile?user=${u.user_id})`).join("\n")
-                                : "None",
-                            inline: false
+                const members = lobby.users.length > 0
+                    ? lobby.users.map((u: any) => `• **${u.username}** (ID: ${u.user_id})`).join("\n")
+                    : "• No members";
+
+                const content = `🏠 **Lobby Information**\n\n` +
+                    `🏷️ **Lobby ID:** \`${lobby.lobbyId}\`\n\n` +
+                    `👥 **Members:**\n${members}\n\n` +
+                    `🔗 [View lobby details](https://croissant-api.fr/lobby?id=${lobby.lobbyId})`;
+
+                return {
+                    type: 4, // InteractionResponseType.ChannelMessageWithSource
+                    data: {
+                        content: content
+                    }
+                };
+            } 
+            else if (subcommand === "join") {
+                 
+                const lobbyId = (interaction.data.options as any)?.[0]?.options?.[0]?.value;
+                if (!lobbyId) {
+                    return {
+                        type: 4, // InteractionResponseType.ChannelMessageWithSource
+                        data: {
+                            content: "❌ Please provide a lobby ID to join.",
+                            flags: 64 // MessageFlags.Ephemeral
                         }
-                    )
-                    .setFooter({ text: `Lobby ID: ${lobby.lobbyId}` });
-                await interaction.reply({ embeds: [embed], ephemeral: false });
-            } else if (subcommand === "join") {
-                const lobbyId = interaction.options.getString("lobby_id", true);
+                    };
+                }
+
                 await croissantAPI.lobbies.join(lobbyId);
-                await interaction.reply({ content: `Joined lobby \`${lobbyId}\`!`, ephemeral: false });
-            } else if (subcommand === "leave") {
-                // You need to know the lobby ID to leave; get user's lobby first
+                return {
+                    type: 4, // InteractionResponseType.ChannelMessageWithSource
+                    data: {
+                        content: `✅ Successfully joined lobby \`${lobbyId}\`!`
+                    }
+                };
+            } 
+            else if (subcommand === "leave") {
                 const lobby = await croissantAPI.lobbies.getMyLobby();
                 await croissantAPI.lobbies.leave(lobby.lobbyId);
-                await interaction.reply({ content: `Left lobby \`${lobby.lobbyId}\`.`, ephemeral: false });
+                return {
+                    type: 4, // InteractionResponseType.ChannelMessageWithSource
+                    data: {
+                        content: `✅ Successfully left lobby \`${lobby.lobbyId}\`.`
+                    }
+                };
+            }
+            else {
+                return {
+                    type: 4, // InteractionResponseType.ChannelMessageWithSource
+                    data: {
+                        content: "❓ **Lobby Commands:**\n\n• `/lobby info` - Show your current lobby info\n• `/lobby join <lobby_id>` - Join a lobby\n• `/lobby leave` - Leave your current lobby",
+                        flags: 64 // MessageFlags.Ephemeral
+                    }
+                };
             }
         } catch (error: any) {
             console.error("Lobby command error:", error);
-            if (error?.message.indexOf("User not in any lobby") != -1) {
-                await interaction.reply({
-                    content: "You are not in a lobby.",
-                    ephemeral: true,
-                });
+            if (error?.message?.indexOf("User not in any lobby") !== -1) {
+                return {
+                    type: 4, // InteractionResponseType.ChannelMessageWithSource
+                    data: {
+                        content: "❌ You are not currently in any lobby.",
+                        flags: 64 // MessageFlags.Ephemeral
+                    }
+                };
             } else {
-                await interaction.reply({
-                    content: "Unable to process your lobby request.",
-                    ephemeral: true,
-                });
+                return {
+                    type: 4, // InteractionResponseType.ChannelMessageWithSource
+                    data: {
+                        content: "❌ Unable to process your lobby request.",
+                        flags: 64 // MessageFlags.Ephemeral
+                    }
+                };
             }
         }
     },
