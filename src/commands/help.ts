@@ -1,15 +1,16 @@
 import {
-    SlashCommandBuilder,
-    ChatInputCommandInteraction,
-    EmbedBuilder,
     ButtonStyle,
-    ComponentType,
+    ChatInputCommandInteraction,
     Client,
+    ComponentType,
+    EmbedBuilder,
+    SlashCommandBuilder,
 } from "discord.js";
+import { Command } from "../types";
 
 const ITEMS_PER_PAGE = 15;
 
-const command = {
+const command: Command = {
     data: new SlashCommandBuilder()
         .setName("help")
         .setDescription("Displays the bot's help menu"),

@@ -1,8 +1,25 @@
-import { Client, Collection, Interaction } from "discord.js";
-import dotenv from "dotenv";
-import { Command, Config } from "./types";
-import { genKey, loadCommands, registerCommands } from "./utils";
+import { verifyKey } from "discord-interactions";
+import {
+  ChatInputCommandInteraction,
+  Collection,
+  InteractionResponseType,
+  InteractionType,
+  MessageFlags
+} from "discord.js";
 import CroissantAPI from "./libs/croissant-api";
+import { Command, DiscordInteraction } from "./types";
+import { genKey } from "./utils";
+
+
+// Import commands
+
+declare global {
+  interface Env {
+    DISCORD_TOKEN: string;
+    DISCORD_PUBLIC_KEY: string;
+    HASH_SECRET: string;
+  }
+}
 
 declare module "discord.js" {
   export interface Client {
@@ -10,69 +27,117 @@ declare module "discord.js" {
   }
 }
 
-dotenv.config();
+const commands = new Collection<string, Command>();
 
-const dryCroissantApi = new CroissantAPI();
+import helpCommand from "./commands/help";
+commands.set("help", helpCommand)
 
-const config: Config = {
-  DISCORD_TOKEN: process.env.DISCORD_TOKEN || "",
+async function handleInteraction(interaction: DiscordInteraction) {
+  const dryCroissantApi = new CroissantAPI();
+
+  if (interaction.type === InteractionType.ApplicationCommand) {
+    const command = commands.get(interaction.data.name) as Command;
+    if (!command) {
+      console.error(`No command matching ${interaction.data.name} was found.`);
+      return new Response(JSON.stringify({
+        type: InteractionResponseType.ChannelMessageWithSource,
+        data: {
+          content: "Command not found!",
+          flags: MessageFlags.Ephemeral
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    try {
+      const userId = interaction.member?.user?.id || interaction.user?.id;
+      const realUser = await dryCroissantApi.users.getUser(userId);
+      const token = genKey(realUser.userId);
+
+      if (!token) {
+        return new Response(JSON.stringify({
+          type: InteractionResponseType.ChannelMessageWithSource,
+          data: {
+            content: "You are not authenticated. Please link your account.",
+            flags: MessageFlags.Ephemeral
+          }
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      const croissantApi = new CroissantAPI({ token });
+
+      const result = await command.execute(interaction as unknown as ChatInputCommandInteraction, croissantApi);
+
+
+      if (result) {
+        return new Response(JSON.stringify(result), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      return new Response(JSON.stringify({
+        type: InteractionResponseType.ChannelMessageWithSource,
+        data: { content: "Command executed successfully!" }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+    } catch (error) {
+      console.error(`Error executing ${interaction.data.name}:`, error);
+      return new Response(JSON.stringify({
+        type: InteractionResponseType.ChannelMessageWithSource,
+        data: {
+          content: "There was an error while executing this command!",
+          flags: MessageFlags.Ephemeral
+        }
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+  }
+
+
+  return new Response(JSON.stringify({
+    type: InteractionResponseType.Pong
+  }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method !== 'POST') {
+      return new Response('Method not allowed', { status: 405 });
+    }
+    
+    const signature = request.headers.get('X-Signature-Ed25519');
+    const timestamp = request.headers.get('X-Signature-Timestamp');
+    const body = await request.text();
+
+    if (!signature || !timestamp) {
+      return new Response('Missing signature headers', { status: 401 });
+    }
+
+
+    const isValid = await verifyKey(body, signature, timestamp, env.DISCORD_PUBLIC_KEY);
+    if (!isValid) {
+      return new Response('Invalid signature', { status: 401 });
+    }
+
+    const interaction = JSON.parse(body);
+
+
+    if (interaction.type === InteractionType.Ping) {
+      return new Response(JSON.stringify({ type: InteractionResponseType.Pong }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return handleInteraction(interaction);
+  },
 };
 
-const client = new Client({ intents: [] });
-client.commands = new Collection<string, Command>();
 
-client.on("ready", async () => {
-  console.log(`Logged in as ${client.user?.tag}!`);
-  // if (process.env.CLEAR_COMMANDS)
-  //   await clearExistingCommands(client);
-  await loadCommands(client);
-  await registerCommands(client);
-});
-
-client.on("interactionCreate", async (interaction: Interaction) => {
-  if (!interaction.isCommand() && !interaction.isAutocomplete()) return;
-
-  if (interaction.isAutocomplete()) {
-    const command = client.commands.get(interaction.commandName) as Command;
-    if (!command || !command.autocomplete) return;
-    try {
-      const token = await genKey(interaction.user.id);
-      const croissantApi = new CroissantAPI({ token });
-      await command.autocomplete(interaction, croissantApi);
-    } catch (error) {
-      console.error(`Error executing autocomplete for ${interaction.commandName}:`, error);
-    }
-    return;
-  }
-
-  const command = client.commands.get(interaction.commandName) as Command;
-  if (!command) {
-    console.error(`No command matching ${interaction.commandName} was found.`);
-    await interaction.reply({ content: "Command not found!", ephemeral: true });
-    return;
-  }
-
-  try {
-    const realUser = await dryCroissantApi.users.getUser(interaction.user.id)
-    const token = await genKey(realUser.userId);
-    if (!token) {
-      await interaction.reply({ content: "You are not authenticated. Please link your account.", ephemeral: true });
-      return;
-    }
-    const croissantApi = new CroissantAPI({ token });
-    await command.execute(interaction, croissantApi);
-  } catch (error) {
-    console.error(`Error executing ${interaction.commandName}:`, error);
-    await interaction.reply({ content: "There was an error while executing this command!", ephemeral: true });
-  }
-});
-
-client.login(config.DISCORD_TOKEN);
-
-process.on("uncaughtException", (error: Error) => {
-  console.error("🚨 Uncaught Exception: An error occurred!", error);
-});
-
-process.on("unhandledRejection", (reason: unknown, promise: Promise<unknown>) => {
-  console.warn("⚠️ Unhandled Rejection at:", promise, "reason:", reason);
-});

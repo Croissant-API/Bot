@@ -1,39 +1,26 @@
 import crypto from "crypto";
-import dotenv from "dotenv";
-import path from "path";
-import fs from "node:fs";
-import { Command } from "./types";
 import { Client } from "discord.js";
-
-// Chargement de la configuration .env
-dotenv.config({ path: path.join(__dirname, ".env") });
+import fs from "node:fs";
+import path from "path";
+import { Command } from "./types";
 
 const ALGO = "aes-256-cbc";
 const IV_LENGTH = 16;
 
-/**
- * Encrypts the userId for API key generation (new method).
- */
 export function genKey(userId: string): string {
   const SECRET = process.env.HASH_SECRET!;
   const iv = crypto.randomBytes(IV_LENGTH);
-  const key = crypto.createHash("sha256").update(SECRET).digest(); // 32 bytes
+  const key = crypto.createHash("sha256").update(SECRET).digest(); 
   const cipher = crypto.createCipheriv(ALGO, key, iv);
   let encrypted = cipher.update(userId, "utf8", "hex");
   encrypted += cipher.final("hex");
   return iv.toString("hex") + ":" + encrypted;
 }
 
-/**
- * Pause l'exécution pour un nombre de millisecondes donné.
- */
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Emojis utilisés dans le bot.
- */
 export const emojis = {
   credits: "<:credit:1369444764906164316>",
   verified: "<:verified:1398991338799890463>",
@@ -48,9 +35,6 @@ export const emojis = {
   bugHunter: "<:bug_hunter:1425082863480471614>",
 };
 
-/**
- * Charge les commandes du dossier 'commands' et les ajoute au client.
- */
 export async function loadCommands(client: Client): Promise<void> {
   client.commands.clear();
 
@@ -70,17 +54,15 @@ export async function loadCommands(client: Client): Promise<void> {
   }
 }
 
-/**
- * Enregistre les commandes auprès de l'application Discord.
- */
 export async function registerCommands(client: Client): Promise<void> {
   const commands = client.application?.commands;
   if (!commands) return;
 
   try {
     for (const command of client.commands.values()) {
+      const commandData = 'toJSON' in command.data ? command.data.toJSON() : command.data;
       await commands.create({
-        ...command.data.toJSON(),
+        ...commandData,
         integration_types: [0, 1],
         contexts: [0, 1, 2],
       });
@@ -91,9 +73,6 @@ export async function registerCommands(client: Client): Promise<void> {
   }
 }
 
-/**
- * Supprime toutes les commandes existantes de l'application Discord.
- */
 export async function clearExistingCommands(client: Client): Promise<void> {
   const commands = await client.application?.commands.fetch();
   if (!commands) return;
